@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from app.database import get_db
 from app.schemas import auth as schemas
 from app.utils import (
@@ -16,6 +17,9 @@ from app.models import user as models
 from app.utils import get_password_hash
 from app.utils.mail_sender import send_welcome_email
 from app.models.price_correction import PriceCorrection
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/auth",
@@ -24,51 +28,54 @@ router = APIRouter(
 
 @router.post("/register", response_model=schemas.Token)
 async def register(user_data: schemas.RegisterRequest, db: Session = Depends(get_db)):
-    # Verificar si el usuario ya existe
-    db_user = db.query(models.User).filter(models.User.email == user_data.email).first()
-    if db_user:
-        raise HTTPException(
-            status_code=400,
-            detail="El email ya está registrado"
-        )
-    
-    # Validar que las contraseñas coincidan
-    if user_data.password != user_data.confirm_password:
-        raise HTTPException(
-            status_code=400,
-            detail="Las contraseñas no coinciden"
-        )
-    
-    # Validar la seguridad de la contraseña
-    validate_password(user_data.password)
-    
-    # Validar el rol
-    if user_data.rol not in ["comprador", "vendedor"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Rol inválido. Debe ser 'comprador' o 'vendedor'"
-        )
-    
-    # Crear el usuario
-    hashed_password = get_password_hash(user_data.password)
-    db_user = models.User(
-        email=user_data.email,
-        name=user_data.name,
-        lastname=user_data.lastname,
-        hashed_password=hashed_password,
-        rol=user_data.rol
-    )
-    
     try:
+        # Verificar si el usuario ya existe
+        db_user = db.query(models.User).filter(models.User.email == user_data.email).first()
+        if db_user:
+            raise HTTPException(
+                status_code=400,
+                detail="El email ya está registrado"
+            )
+        
+        # Validar que las contraseñas coincidan
+        if user_data.password != user_data.confirm_password:
+            raise HTTPException(
+                status_code=400,
+                detail="Las contraseñas no coinciden"
+            )
+        
+        # Validar la seguridad de la contraseña
+        validate_password(user_data.password)
+        
+        # Validar el rol
+        if user_data.rol not in ["comprador", "vendedor"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Rol inválido. Debe ser 'comprador' o 'vendedor'"
+            )
+        
+        # Crear el usuario
+        hashed_password = get_password_hash(user_data.password)
+        db_user = models.User(
+            email=user_data.email,
+            name=user_data.name,
+            lastname=user_data.lastname,
+            hashed_password=hashed_password,
+            rol=user_data.rol
+        )
+        
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
         
-        # Enviar email de bienvenida
-        send_welcome_email(
-            to_email=db_user.email,
-            username=user_data.name
-        )
+        # Enviar email de bienvenida (no detengas el proceso si falla)
+        try:
+            send_welcome_email(
+                to_email=db_user.email,
+                username=user_data.name
+            )
+        except Exception as e:
+            logger.warning(f"No se pudo enviar email de bienvenida a {db_user.email}: {str(e)}")
         
         # Generar tokens
         access_token = create_access_token(
@@ -85,11 +92,28 @@ async def register(user_data: schemas.RegisterRequest, db: Session = Depends(get
             "rol": db_user.rol
         }
     
-    except Exception as e:
+    except HTTPException:
+        raise
+    except IntegrityError as e:
         db.rollback()
+        logger.error(f"Error de integridad al registrar usuario: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail="El email ya está registrado"
+        )
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Error en base de datos al registrar usuario: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error al crear el usuario: {str(e)}"
+            detail="Error al crear el usuario"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error inesperado al registrar usuario: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error al crear el usuario"
         )
 
 @router.post("/login", response_model=schemas.Token)
@@ -97,29 +121,44 @@ async def login(
     login_data: schemas.LoginRequest,
     db: Session = Depends(get_db)
 ):
-    user = authenticate_user(db, login_data.email, login_data.password)
-    if not user:
+    try:
+        user = authenticate_user(db, login_data.email, login_data.password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Email o contraseña incorrectos",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        access_token = create_access_token(data={"sub": user.email, "rol": user.rol})
+        refresh_token = create_refresh_token(data={"sub": user.email, "rol": user.rol})
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "rol": user.rol
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error al hacer login: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email o contraseña incorrectos",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=500,
+            detail="Error al iniciar sesión"
         )
-    
-    access_token = create_access_token(data={"sub": user.email, "rol": user.rol})
-    refresh_token = create_refresh_token(data={"sub": user.email, "rol": user.rol})
-    
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "rol": user.rol
-    }
 
 @router.post("/refresh", response_model=schemas.Token)
 async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
     try:
         # Verificar el refresh token
         payload = verify_token(refresh_token, REFRESH_SECRET_KEY)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido"
+            )
+        
         email = payload.get("sub")
         rol = payload.get("rol")
         
@@ -145,7 +184,10 @@ async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
             "token_type": "bearer"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error al refrescar token: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No se pudo refrescar el token"
@@ -156,19 +198,28 @@ async def get_me(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Contar las correcciones del usuario
-    corrections_count = db.query(PriceCorrection).filter(
-        PriceCorrection.timestamp.isnot(None) # Aquí podríamos filtrar por user_id si existiera en PriceCorrection
-    ).count() 
-    # NOTA: Por ahora el modelo PriceCorrection no tiene user_id, 
-    # así que devolvemos un conteo general o 0 hasta que actualicemos ese modelo.
-    
-    return {
-        "id": current_user.id,
-        "email": current_user.email,
-        "name": current_user.name,
-        "lastname": current_user.lastname,
-        "rol": current_user.rol,
-        "points": current_user.points,
-        "corrections_count": 0 # TODO: Implementar relación user-corrections
-    }
+    try:
+        # Contar las correcciones del usuario
+        try:
+            corrections_count = db.query(PriceCorrection).filter(
+                PriceCorrection.timestamp.isnot(None)
+            ).count()
+        except Exception as e:
+            logger.warning(f"No se pudo contar correcciones: {str(e)}")
+            corrections_count = 0
+        
+        return {
+            "id": current_user.id,
+            "email": current_user.email,
+            "name": current_user.name,
+            "lastname": current_user.lastname,
+            "rol": current_user.rol,
+            "points": current_user.points,
+            "corrections_count": corrections_count
+        }
+    except Exception as e:
+        logger.error(f"Error al obtener datos del usuario: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error al obtener los datos del usuario"
+        )

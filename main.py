@@ -1,13 +1,29 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from starlette.responses import JSONResponse
 import os
 from dotenv import load_dotenv
+import logging
 
-from app.database import engine, Base, create_tables
+from app.database import engine, Base, create_tables, verify_database_connection
 from app.routers import products, auth, locals
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Carga de variables de entorno
 load_dotenv()
+
+# Validar que existan variables de entorno críticas
+required_env_vars = ["SECRET_KEY", "REFRESH_SECRET_KEY"]
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    logger.warning(f"Variables de entorno faltantes: {missing_vars}")
 
 # Crear la aplicación FastAPI
 app = FastAPI(
@@ -17,7 +33,20 @@ app = FastAPI(
 )
 
 # Crear las tablas de la base de datos
-create_tables()
+try:
+    create_tables()
+    logger.info("Tablas de base de datos creadas/verificadas exitosamente")
+except Exception as e:
+    logger.error(f"Error al crear tablas: {str(e)}")
+
+# Verificar conexión a BD
+try:
+    if verify_database_connection():
+        logger.info("✓ Conexión a base de datos establecida")
+    else:
+        logger.error("✗ No se pudo establecer conexión a base de datos")
+except Exception as e:
+    logger.error(f"Error al verificar conexión: {str(e)}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,7 +67,14 @@ def read_root():
 
 @app.get("/health-check")
 def health_check():
-    return {"status": "ok", "message": "Estoy vivo!"}
+    try:
+        if verify_database_connection():
+            return {"status": "ok", "message": "Estoy vivo!", "database": "connected"}
+        else:
+            return {"status": "warning", "message": "Estoy vivo pero sin conexión a BD", "database": "disconnected"}
+    except Exception as e:
+        logger.error(f"Error en health-check: {str(e)}")
+        return {"status": "warning", "message": "Error verificando BD", "database": "error"}
 
 # Obtener el puerto de la variable de entorno o usar el predeterminado
 port = int(os.getenv("PORT", "8000"))
