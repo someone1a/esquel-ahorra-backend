@@ -48,10 +48,10 @@ async def register(user_data: schemas.RegisterRequest, db: Session = Depends(get
         validate_password(user_data.password)
         
         # Validar el rol
-        if user_data.rol not in ["comprador", "vendedor"]:
+        if user_data.rol not in ["comprador", "vendedor", "supervisor"]:
             raise HTTPException(
                 status_code=400,
-                detail="Rol inválido. Debe ser 'comprador' o 'vendedor'"
+                detail="Rol inválido. Debe ser 'comprador', 'vendedor' o 'supervisor'"
             )
         
         # Crear el usuario

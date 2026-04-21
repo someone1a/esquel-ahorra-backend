@@ -62,7 +62,46 @@ def migrate_null_is_active():
         logger.error(f"✗ Error en migración: {str(e)}")
         return False
 
-def check_table_structure():
+def migrate_price_corrections():
+    """Agrega columnas user_id y status a price_corrections"""
+    try:
+        with engine.connect() as connection:
+            logger.info("Verificando tabla 'price_corrections'...")
+            
+            # Verificar si ya existe la columna user_id
+            if os.getenv("USE_SQLITE") == "True":
+                result = connection.execute(text("PRAGMA table_info(price_corrections)"))
+                columns = [row[1] for row in result.fetchall()]
+            else:
+                result = connection.execute(text("DESCRIBE price_corrections"))
+                columns = [row[0] for row in result.fetchall()]
+            
+            if "user_id" not in columns:
+                logger.info("Agregando columna 'user_id'...")
+                if os.getenv("USE_SQLITE") == "True":
+                    connection.execute(text("ALTER TABLE price_corrections ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1"))
+                else:
+                    connection.execute(text("ALTER TABLE price_corrections ADD COLUMN user_id INT NOT NULL"))
+                logger.info("✓ Columna 'user_id' agregada")
+            
+            if "status" not in columns:
+                logger.info("Agregando columna 'status'...")
+                if os.getenv("USE_SQLITE") == "True":
+                    connection.execute(text("ALTER TABLE price_corrections ADD COLUMN status TEXT DEFAULT 'approved'"))
+                else:
+                    connection.execute(text("ALTER TABLE price_corrections ADD COLUMN status VARCHAR(20) DEFAULT 'approved'"))
+                logger.info("✓ Columna 'status' agregada")
+            
+            # Actualizar registros existentes a 'approved' si no tienen status
+            logger.info("Actualizando registros existentes...")
+            connection.execute(text("UPDATE price_corrections SET status = 'approved' WHERE status IS NULL"))
+            connection.commit()
+            
+            logger.info("✓ Migración de price_corrections completada")
+            return True
+    except Exception as e:
+        logger.error(f"✗ Error en migración de price_corrections: {str(e)}")
+        return False
     """Verifica la estructura de la tabla"""
     try:
         with engine.connect() as connection:
@@ -151,9 +190,6 @@ def migrate_products_to_prices():
 if __name__ == "__main__":
     logger.info("=== Iniciando Migración ===")
     
-    # Verificar estructura
-    check_table_structure()
-    
     # Ejecutar migración
     logger.info("\n=== Ejecutando Migración ===")
     success = migrate_null_is_active()
@@ -162,8 +198,14 @@ if __name__ == "__main__":
         logger.info("\n=== Ejecutando Migración de Products ===")
         success_products = migrate_products_to_prices()
         if success_products:
-            logger.info("\n✓ Todas las migraciones completadas correctamente")
-            exit(0)
+            logger.info("\n=== Ejecutando Migración de Price Corrections ===")
+            success_corrections = migrate_price_corrections()
+            if success_corrections:
+                logger.info("\n✓ Todas las migraciones completadas correctamente")
+                exit(0)
+            else:
+                logger.info("\n✗ Migración de price_corrections falló")
+                exit(1)
         else:
             logger.info("\n✗ Migración de products falló")
             exit(1)

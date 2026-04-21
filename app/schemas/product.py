@@ -40,3 +40,18 @@ class ProductSearchResponse(BaseModel):
     product: Optional[Product] = None
     products: Optional[List[Product]] = None
     message: str
+
+class PriceCorrectionBase(BaseModel):
+    product_id: int
+    old_price: float
+    new_price: float
+    local_id: int
+    user_id: int
+    status: str
+
+class PriceCorrection(PriceCorrectionBase):
+    id: int
+    timestamp: str
+
+    class Config:
+        from_attributes = True

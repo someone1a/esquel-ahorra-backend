@@ -23,8 +23,8 @@ def create_local(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Solo vendedores o admin pueden crear locales
-    if current_user.rol != "vendedor":
+    # Solo vendedores o supervisores pueden crear locales
+    if current_user.rol not in ["vendedor", "supervisor"]:
         raise HTTPException(status_code=403, detail="No tienes permisos para crear locales")
     
     try:

@@ -44,29 +44,49 @@ def get_product_by_barcode(db: Session, codigo_barra: str):
         logger.error(f"Error en base de datos al obtener producto por código: {str(e)}")
         raise ValueError("Error al obtener el producto")
 
-def update_product_price(db: Session, product_id: int, update: ProductUpdate):
+def update_product_price(db: Session, product_id: int, update: ProductUpdate, user_id: int, user_role: str):
     try:
         # Buscar el precio existente para este producto y local
         price = db.query(Price).filter(Price.product_id == product_id, Price.local_id == update.local_id).first()
-        if price:
-            old_price = price.precio
-            price.precio = update.precio
-        else:
-            # Si no existe, crear uno nuevo
-            price = Price(product_id=product_id, local_id=update.local_id, precio=update.precio)
-            db.add(price)
-            old_price = 0  # O None, pero para correction
         
-        correction = PriceCorrection(
-            product_id=product_id,
-            old_price=old_price,
-            new_price=update.precio,
-            local_id=update.local_id
-        )
-        db.add(correction)
-        db.commit()
-        db.refresh(price)
-        return price.product  # Devolver el producto
+        if user_role == "supervisor":
+            # Supervisores pueden actualizar directamente sin restricciones
+            if price:
+                old_price = price.precio
+                price.precio = update.precio
+            else:
+                # Si no existe, crear uno nuevo
+                price = Price(product_id=product_id, local_id=update.local_id, precio=update.precio)
+                db.add(price)
+                old_price = 0
+            
+            correction = PriceCorrection(
+                product_id=product_id,
+                old_price=old_price,
+                new_price=update.precio,
+                local_id=update.local_id,
+                user_id=user_id,
+                status="approved"  # Aprobado automáticamente para supervisores
+            )
+            db.add(correction)
+            db.commit()
+            db.refresh(price)
+            return price.product
+        else:
+            # Usuarios normales requieren aprobación para ser más estrictos
+            old_price = price.precio if price else 0
+            correction = PriceCorrection(
+                product_id=product_id,
+                old_price=old_price,
+                new_price=update.precio,
+                local_id=update.local_id,
+                user_id=user_id,
+                status="pending"
+            )
+            db.add(correction)
+            db.commit()
+            # No actualizar el precio aún, esperar aprobación
+            return db.query(Product).filter(Product.id == product_id).first()
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error en base de datos al actualizar precio: {str(e)}")
@@ -86,7 +106,38 @@ def search_products_by_name(db: Session, query: str):
         logger.error(f"Error en base de datos al buscar productos por nombre: {str(e)}")
         raise ValueError("Error al buscar productos por nombre")
 
-def search_products(db: Session, barcode: str = None, name: str = None) -> ProductSearchResponse:
+def approve_price_correction(db: Session, correction_id: int):
+    try:
+        correction = db.query(PriceCorrection).filter(PriceCorrection.id == correction_id).first()
+        if not correction:
+            raise ValueError("Corrección no encontrada")
+        
+        if correction.status != "pending":
+            raise ValueError("La corrección ya ha sido procesada")
+        
+        # Actualizar el precio
+        price = db.query(Price).filter(Price.product_id == correction.product_id, Price.local_id == correction.local_id).first()
+        if price:
+            price.precio = correction.new_price
+        else:
+            # Crear precio si no existe
+            price = Price(product_id=correction.product_id, local_id=correction.local_id, precio=correction.new_price)
+            db.add(price)
+        
+        correction.status = "approved"
+        db.commit()
+        return correction
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Error en base de datos al aprobar corrección: {str(e)}")
+        raise ValueError("Error al aprobar la corrección")
+
+def get_pending_corrections(db: Session):
+    try:
+        return db.query(PriceCorrection).filter(PriceCorrection.status == "pending").all()
+    except SQLAlchemyError as e:
+        logger.error(f"Error en base de datos al obtener correcciones pendientes: {str(e)}")
+        raise ValueError("Error al obtener correcciones pendientes")
     try:
         if barcode:
             product = get_product_by_barcode(db, barcode)
