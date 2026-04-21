@@ -41,6 +41,19 @@ def search_products_endpoint(barcode: str = None, name: str = None, db: Session 
         logger.error(f"Error al buscar productos: {str(e)}")
         raise HTTPException(status_code=500, detail="Error al buscar productos")
 
+@router.get("/products/barcode/{barcode}", response_model=Product)
+def get_product_by_barcode_endpoint(barcode: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        product = get_product_by_barcode(db, barcode)
+        if not product:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+        return product
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error al obtener producto por barcode: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al obtener el producto")
+
 @router.get("/products/{product_id}", response_model=Product)
 def read_product(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:

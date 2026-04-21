@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from app.models.product import Product, Price
+from app.models.product import Product, Price, Barcode
 from app.models.price_correction import PriceCorrection
 from app.schemas.product import ProductCreate, ProductUpdate, ProductSearchResponse
 import logging
@@ -10,9 +10,14 @@ logger = logging.getLogger(__name__)
 def create_product(db: Session, product: ProductCreate):
     try:
         # Crear el producto
-        db_product = Product(nombre=product.nombre, codigo_barra=product.codigo_barra)
+        db_product = Product(nombre=product.nombre)
         db.add(db_product)
         db.flush()  # Para obtener el id
+        
+        # Crear el barcode
+        db_barcode = Barcode(codigo_barra=product.codigo_barra, product_id=db_product.id)
+        db.add(db_barcode)
+        db.flush()
         
         # Crear el precio
         db_price = Price(product_id=db_product.id, local_id=product.local_id, precio=product.precio)
@@ -39,7 +44,10 @@ def get_product(db: Session, product_id: int):
 
 def get_product_by_barcode(db: Session, codigo_barra: str):
     try:
-        return db.query(Product).filter(Product.codigo_barra == codigo_barra).first()
+        barcode = db.query(Barcode).filter(Barcode.codigo_barra == codigo_barra).first()
+        if barcode:
+            return barcode.product
+        return None
     except SQLAlchemyError as e:
         logger.error(f"Error en base de datos al obtener producto por código: {str(e)}")
         raise ValueError("Error al obtener el producto")

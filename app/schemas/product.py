@@ -3,14 +3,25 @@ from typing import List, Optional
 
 class ProductBase(BaseModel):
     nombre: str
+
+class BarcodeBase(BaseModel):
     codigo_barra: str
+
+class Barcode(BarcodeBase):
+    id: int
+    product_id: int
+
+    class Config:
+        from_attributes = True
 
 class ProductCreate(ProductBase):
     precio: float
     local_id: int
+    codigo_barra: str  # Se usa al crear para crear el barcode
 
 class Product(ProductBase):
     id: int
+    barcodes: Optional[List[Barcode]] = None
     prices: Optional[List["Price"]] = None
 
     class Config:
