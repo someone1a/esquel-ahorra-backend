@@ -8,4 +8,4 @@ class Local(Base):
     nombre = Column(String(255), nullable=False)
     direccion = Column(String(255), nullable=False)
     telefono = Column(String(50), nullable=True)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, nullable=False)

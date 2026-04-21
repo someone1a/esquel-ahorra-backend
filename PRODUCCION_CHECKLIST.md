@@ -1,8 +1,42 @@
 # Checklist para Producción - Esquelahorra API
 
-## Cambios Realizados
+## 🔴 Error Crítico Corregido: GET /locals/ → 500
 
-He mejorado el manejo de errores en toda la aplicación para evitar errores 500 sin detalles:
+### Problema
+El endpoint `GET /locals/` retornaba error 500 por validación de Pydantic:
+```
+3 validation errors for response
+  {'type': 'bool_type', 'loc': ('response', 0, 'is_active'), 
+   'msg': 'Input should be a valid boolean', 'input': None}
+```
+- Registros en BD tenían `is_active = NULL`
+- Schema esperaba `is_active: bool` (no nullable)
+
+### Solución Aplicada
+✅ Schema tolerante a NULL en [app/schemas/local.py](app/schemas/local.py)
+✅ Modelo BD con `nullable=False` en [app/models/local.py](app/models/local.py)
+✅ Script de migración en [migrations.py](migrations.py)
+✅ Script SQL en [fix_is_active.sql](fix_is_active.sql)
+
+### ⚡ EJECUTAR MIGRACIÓN AHORA en Producción
+
+**Opción 1: Script Python (recomendado)**
+```bash
+cd /ruta/al/proyecto
+source .venv/bin/activate
+python migrations.py
+```
+
+**Opción 2: Script SQL directo**
+```bash
+mysql -u api -p Esquelahorra < fix_is_active.sql
+```
+
+**Ver instrucciones detalladas:** [MIGRACION_IS_ACTIVE.md](MIGRACION_IS_ACTIVE.md)
+
+---
+
+## Cambios Realizados
 
 ### 1. **Logging Global** (`main.py`)
    - ✅ Agregado logging centralizado en todas las operaciones
@@ -19,6 +53,9 @@ He mejorado el manejo de errores en toda la aplicación para evitar errores 500 
    - ✅ Validación de variables de entorno en startup
    - ✅ `pool_pre_ping=True` para MySQL (reconecta si la conexión se perdió)
    - ✅ Nueva función `verify_database_connection()`
+
+### 4. **Schemas Mejorados**
+   - ✅ `app/schemas/local.py` - `is_active` con valor por defecto y validador
 
 ## Verificación Antes de Desplegar
 
@@ -38,30 +75,43 @@ PORT=8000
 
 ### Paso a Paso para Verificar
 
-1. **Verifica la conexión a MySQL en producción:**
+1. **Ejecutar migración de datos:**
    ```bash
-   # En tu servidor
-   mysql -h DB_HOST -u DB_USER -p
-   # Verifica que la base de datos existe:
-   SHOW DATABASES;
+   python migrations.py
    ```
 
-2. **Revisa los logs después del deploy:**
+2. **Verifica la BD:**
+   ```bash
+   mysql -h localhost -u api -p
+   USE Esquelahorra;
+   SELECT COUNT(*) as null_count FROM locals WHERE is_active IS NULL;
+   # Debería devolver: 0
+   ```
+
+3. **Reinicia la API:**
+   ```bash
+   systemctl restart esquel-ahorra-api
+   # o donde sea que lo ejecutes
+   ```
+
+4. **Revisa los logs:**
    ```bash
    tail -f /var/log/esquel-api/app.log
    ```
 
-3. **Prueba el endpoint de health-check:**
+5. **Prueba health-check:**
    ```bash
    curl https://tu-dominio.com/health-check
    # Debería devolver:
    # {"status": "ok", "database": "connected"}
    ```
 
-4. **Para el error en POST /locals específicamente:**
-   - ✅ Verificado: Ahora captura errores de BD
-   - ✅ Verificado: Retorna mensajes claros si falla
-   - ✅ Verificado: Logging detallado del error
+6. **Prueba GET /locals:**
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     https://tu-dominio.com/locals/
+   # Debería retornar JSON con locales, SIN error 500
+   ```
 
 ## Si Continúa el Error 500
 
@@ -73,15 +123,11 @@ Revisa los logs del servidor. Ahora deberían mostrar el error específico:
 #    "Error al conectar a la base de datos: Can't connect to MySQL server"
 #    → Solución: Verifica DB_HOST, DB_USER, DB_PASSWORD, firewall
 
-# 2. Tabla no existe
-#    "Error en base de datos al crear local: Table 'BD' doesn't exist"
-#    → Solución: Las tablas se crean automáticamente, pero verifica permisos de BD
+# 2. is_active = NULL (ya debe estar resuelto tras migración)
+#    "3 validation errors: ... 'is_active', 'msg': 'Input should be a valid boolean'"
+#    → Solución: Ejecutar migrations.py
 
-# 3. Campo faltante en LocalCreate
-#    "Error de integridad al crear local: Column 'X' cannot be null"
-#    → Solución: Verifica que envíes los campos requeridos en el POST
-
-# 4. Variables de entorno faltantes
+# 3. Variables de entorno faltantes
 #    "Variables de entorno faltantes: ['SECRET_KEY', 'REFRESH_SECRET_KEY']"
 #    → Solución: Configura esas variables en tu .env o en el servidor
 ```
@@ -94,7 +140,15 @@ Revisa los logs del servidor. Ahora deberían mostrar el error específico:
 4. **Performance**: Considera agregar cache para queries frecuentes
 5. **Rate Limiting**: Considera agregar limitación de rate para protegerse de ataques
 
-## Probado Localmente
+## Archivos Importantes
 
-Los cambios han sido aplicados y el código está listo para producción. 
-Si el error 500 continúa, los logs ahora te dirán exactamente qué está fallando.
+- 📄 [migrations.py](migrations.py) - Script Python para migración
+- 📄 [fix_is_active.sql](fix_is_active.sql) - Script SQL para migración
+- 📄 [MIGRACION_IS_ACTIVE.md](MIGRACION_IS_ACTIVE.md) - Instrucciones detalladas
+- 📄 [main.py](main.py) - Aplicación principal con logging
+- 📄 [app/database.py](app/database.py) - Configuración de BD mejorada
+
+## Status
+
+Los cambios han sido aplicados y el código está listo para producción.
+**ACCIÓN REQUERIDA:** Ejecutar `python migrations.py` en producción para resolver el error 500.
