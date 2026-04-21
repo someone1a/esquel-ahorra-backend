@@ -82,6 +82,72 @@ def check_table_structure():
         logger.error(f"✗ Error al verificar estructura: {str(e)}")
         return False
 
+def migrate_products_to_prices():
+    """Migra precio y local_id de products a nueva tabla prices"""
+    try:
+        with engine.connect() as connection:
+            logger.info("Verificando tabla 'products'...")
+            
+            # Verificar si existe tabla prices
+            if os.getenv("USE_SQLITE") == "True":
+                result = connection.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='prices'"))
+            else:
+                result = connection.execute(text("SHOW TABLES LIKE 'prices'"))
+            
+            if not result.fetchone():
+                logger.info("Creando tabla 'prices'...")
+                if os.getenv("USE_SQLITE") == "True":
+                    connection.execute(text("""
+                        CREATE TABLE prices (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            product_id INTEGER NOT NULL,
+                            local_id INTEGER NOT NULL,
+                            precio REAL NOT NULL,
+                            FOREIGN KEY (product_id) REFERENCES products (id)
+                        )
+                    """))
+                else:
+                    connection.execute(text("""
+                        CREATE TABLE prices (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            product_id INT NOT NULL,
+                            local_id INT NOT NULL,
+                            precio FLOAT NOT NULL,
+                            FOREIGN KEY (product_id) REFERENCES products (id)
+                        )
+                    """))
+                connection.commit()
+                logger.info("✓ Tabla 'prices' creada")
+            
+            # Migrar datos
+            logger.info("Migrando datos de products a prices...")
+            result = connection.execute(text("SELECT id, precio, local_id FROM products"))
+            products = result.fetchall()
+            
+            for product in products:
+                product_id, precio, local_id = product
+                connection.execute(text("INSERT INTO prices (product_id, local_id, precio) VALUES (?, ?, ?)"), (product_id, local_id, precio))
+            
+            connection.commit()
+            logger.info(f"✓ Migrados {len(products)} precios")
+            
+            # Dropear columnas precio y local_id de products
+            logger.info("Eliminando columnas precio y local_id de products...")
+            if os.getenv("USE_SQLITE") == "True":
+                # SQLite no soporta DROP COLUMN fácilmente, así que recrear tabla
+                logger.info("Para SQLite, es necesario recrear la tabla manualmente o usar una herramienta externa")
+                logger.info("Columnas precio y local_id deben ser eliminadas manualmente")
+            else:
+                connection.execute(text("ALTER TABLE products DROP COLUMN precio"))
+                connection.execute(text("ALTER TABLE products DROP COLUMN local_id"))
+                connection.commit()
+                logger.info("✓ Columnas eliminadas de products")
+            
+            return True
+    except Exception as e:
+        logger.error(f"✗ Error en migración de products: {str(e)}")
+        return False
+
 if __name__ == "__main__":
     logger.info("=== Iniciando Migración ===")
     
@@ -93,8 +159,14 @@ if __name__ == "__main__":
     success = migrate_null_is_active()
     
     if success:
-        logger.info("\n✓ Migración completada correctamente")
-        exit(0)
+        logger.info("\n=== Ejecutando Migración de Products ===")
+        success_products = migrate_products_to_prices()
+        if success_products:
+            logger.info("\n✓ Todas las migraciones completadas correctamente")
+            exit(0)
+        else:
+            logger.info("\n✗ Migración de products falló")
+            exit(1)
     else:
         logger.info("\n✗ Migración falló")
         exit(1)
