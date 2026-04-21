@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from typing import List
 from app.database import get_db
 from app.schemas.product import ProductCreate, Product, ProductUpdate, ProductSearchRequest, ProductSearchResponse, PriceCorrection
 from app.services.products import create_product, get_product, get_product_by_barcode, update_product_price, get_corrections_count, search_products, search_products_by_name, approve_price_correction, get_pending_corrections
