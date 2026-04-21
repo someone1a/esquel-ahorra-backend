@@ -50,7 +50,7 @@ except Exception as e:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8081","https://esquel-ahorra.online/"],
+    allow_origins=["http://localhost:3000", "http://localhost:8081","https://esquel-ahorra.online"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
