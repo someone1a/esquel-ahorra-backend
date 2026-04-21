@@ -138,6 +138,8 @@ def get_pending_corrections(db: Session):
     except SQLAlchemyError as e:
         logger.error(f"Error en base de datos al obtener correcciones pendientes: {str(e)}")
         raise ValueError("Error al obtener correcciones pendientes")
+
+def search_products(db: Session, barcode: str = None, name: str = None):
     try:
         if barcode:
             product = get_product_by_barcode(db, barcode)
