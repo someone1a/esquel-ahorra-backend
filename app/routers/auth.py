@@ -211,6 +211,13 @@ async def get_me(
     db: Session = Depends(get_db)
 ):
     try:
+        # Si el usuario no tiene código de referido (usuarios antiguos), generar uno
+        if not current_user.referral_code:
+            import uuid
+            current_user.referral_code = str(uuid.uuid4())[:8]
+            db.commit()
+            db.refresh(current_user)
+
         # Contar las correcciones del usuario
         try:
             corrections_count = db.query(PriceCorrection).filter(
@@ -239,8 +246,16 @@ async def get_me(
 
 @router.get("/invite-link")
 async def get_invite_link(
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
+    # Asegurar que tenga código antes de generar el link
+    if not current_user.referral_code:
+        import uuid
+        current_user.referral_code = str(uuid.uuid4())[:8]
+        db.commit()
+        db.refresh(current_user)
+
     # La URL base debería venir de una variable de entorno en producción
     base_url = os.getenv("FRONTEND_URL", "https://esquel-ahorra.online")
     invite_link = f"{base_url}/register?ref={current_user.referral_code}"

@@ -28,7 +28,7 @@ class UserProfile(BaseModel):
     rol: str
     points: int
     corrections_count: int
-    referral_code: str
+    referral_code: Optional[str] = None
 
     class Config:
         from_attributes = True
