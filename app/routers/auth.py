@@ -244,6 +244,8 @@ async def get_me(
             detail="Error al obtener los datos del usuario"
         )
 
+@router.get("/invite")
+@router.post("/invite")
 @router.get("/invite-link")
 async def get_invite_link(
     current_user: models.User = Depends(get_current_user),
