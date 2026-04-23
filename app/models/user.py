@@ -1,5 +1,7 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship
 from app.database import Base
+import uuid
 
 class User(Base):
     __tablename__ = "users"
@@ -11,3 +13,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     rol = Column(String(50), nullable=False)
     points = Column(Integer, default=0)
+    referral_code = Column(String(50), unique=True, default=lambda: str(uuid.uuid4())[:8])
+    referred_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    referred_by = relationship("User", remote_side=[id], backref="referrals")

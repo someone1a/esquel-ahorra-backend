@@ -32,6 +32,15 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# Handler para errores de validación
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    logger.error(f"Error de validación: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body},
+    )
+
 # Crear las tablas de la base de datos
 try:
     create_tables()
@@ -82,4 +91,12 @@ port = int(os.getenv("PORT", "8000"))
 # Para despliegue
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    import sys
+    
+    # Permitir puerto por argumento de línea de comandos
+    if len(sys.argv) > 2 and sys.argv[1] == "--port":
+        current_port = int(sys.argv[2])
+    else:
+        current_port = port
+        
+    uvicorn.run(app, host="0.0.0.0", port=current_port)

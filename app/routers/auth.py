@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -56,12 +57,23 @@ async def register(user_data: schemas.RegisterRequest, db: Session = Depends(get
         
         # Crear el usuario
         hashed_password = get_password_hash(user_data.password)
+        
+        # Buscar el referente si existe el código
+        referred_by_id = None
+        if user_data.referral_code:
+            referrer = db.query(models.User).filter(models.User.referral_code == user_data.referral_code).first()
+            if referrer:
+                referred_by_id = referrer.id
+                # Opcional: premiar al referente
+                referrer.points += 50 
+
         db_user = models.User(
             email=user_data.email,
             name=user_data.name,
             lastname=user_data.lastname,
             hashed_password=hashed_password,
-            rol=user_data.rol
+            rol=user_data.rol,
+            referred_by_id=referred_by_id
         )
         
         db.add(db_user)
@@ -202,7 +214,7 @@ async def get_me(
         # Contar las correcciones del usuario
         try:
             corrections_count = db.query(PriceCorrection).filter(
-                PriceCorrection.timestamp.isnot(None)
+                PriceCorrection.user_id == current_user.id
             ).count()
         except Exception as e:
             logger.warning(f"No se pudo contar correcciones: {str(e)}")
@@ -215,7 +227,8 @@ async def get_me(
             "lastname": current_user.lastname,
             "rol": current_user.rol,
             "points": current_user.points,
-            "corrections_count": corrections_count
+            "corrections_count": corrections_count,
+            "referral_code": current_user.referral_code
         }
     except Exception as e:
         logger.error(f"Error al obtener datos del usuario: {str(e)}")
@@ -223,3 +236,12 @@ async def get_me(
             status_code=500,
             detail="Error al obtener los datos del usuario"
         )
+
+@router.get("/invite-link")
+async def get_invite_link(
+    current_user: models.User = Depends(get_current_user)
+):
+    # La URL base debería venir de una variable de entorno en producción
+    base_url = os.getenv("FRONTEND_URL", "https://esquel-ahorra.online")
+    invite_link = f"{base_url}/register?ref={current_user.referral_code}"
+    return {"invite_link": invite_link, "referral_code": current_user.referral_code}

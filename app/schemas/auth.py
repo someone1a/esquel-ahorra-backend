@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -7,6 +8,7 @@ class RegisterRequest(BaseModel):
     password: str
     confirm_password: str
     rol: str
+    referral_code: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -26,6 +28,7 @@ class UserProfile(BaseModel):
     rol: str
     points: int
     corrections_count: int
+    referral_code: str
 
     class Config:
         from_attributes = True

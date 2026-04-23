@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-if os.getenv("USE_SQLITE") == "True":
+USE_SQLITE = os.getenv("USE_SQLITE", "False").lower() == "true"
+
+if USE_SQLITE:
     DATABASE_URL = "sqlite:///./test.db"
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
