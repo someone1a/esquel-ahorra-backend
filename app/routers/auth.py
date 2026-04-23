@@ -48,25 +48,37 @@ async def register(user_data: schemas.RegisterRequest, db: Session = Depends(get
         # Validar la seguridad de la contraseña
         validate_password(user_data.password)
         
+        # Buscar el referente si existe el código
+        referred_by_id = None
+        referrer = None
+        if user_data.referral_code:
+            referrer = db.query(models.User).filter(models.User.referral_code == user_data.referral_code).first()
+            if referrer:
+                referred_by_id = referrer.id
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El código de referido no es válido"
+                )
+        
         # Validar el rol
-        if user_data.rol not in ["comprador", "vendedor", "supervisor"]:
+        allowed_roles = ["comprador", "vendedor"]
+        # Solo permitir rol 'supervisor' si tiene un código de referido (invitación) válido
+        if referred_by_id:
+            allowed_roles.append("supervisor")
+            
+        if user_data.rol not in allowed_roles:
+            detail = "Rol inválido."
+            if user_data.rol == "supervisor":
+                detail = "El rol de 'supervisor' requiere un código de invitación válido."
             raise HTTPException(
                 status_code=400,
-                detail="Rol inválido. Debe ser 'comprador', 'vendedor' o 'supervisor'"
+                detail=detail
             )
         
         # Crear el usuario
         hashed_password = get_password_hash(user_data.password)
         
-        # Buscar el referente si existe el código
-        referred_by_id = None
-        if user_data.referral_code:
-            referrer = db.query(models.User).filter(models.User.referral_code == user_data.referral_code).first()
-            if referrer:
-                referred_by_id = referrer.id
-                # Opcional: premiar al referente
-                referrer.points += 50 
-
         db_user = models.User(
             email=user_data.email,
             name=user_data.name,
@@ -77,6 +89,10 @@ async def register(user_data: schemas.RegisterRequest, db: Session = Depends(get
         )
         
         db.add(db_user)
+        # Si hay un referente válido, premiarlo
+        if referrer:
+            referrer.points += 50
+            
         db.commit()
         db.refresh(db_user)
         
@@ -84,7 +100,8 @@ async def register(user_data: schemas.RegisterRequest, db: Session = Depends(get
         try:
             send_welcome_email(
                 to_email=db_user.email,
-                username=user_data.name
+                username=user_data.name,
+                referral_code=db_user.referral_code
             )
         except Exception as e:
             logger.warning(f"No se pudo enviar email de bienvenida a {db_user.email}: {str(e)}")
