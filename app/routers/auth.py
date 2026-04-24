@@ -291,7 +291,7 @@ async def invite_supervisor(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.rol != "supervisor":
+    if current_user.rol not in ["supervisor", "admin"]:
         raise HTTPException(status_code=403, detail="No tienes permisos para invitar supervisores")
 
     if not current_user.referral_code:

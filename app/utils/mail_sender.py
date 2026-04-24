@@ -2,6 +2,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
+from typing import Optional
 
 def send_welcome_email(to_email: str, username: str, referral_code: str = None):
     # Configuración básica, ajustar con variables de entorno
@@ -68,12 +69,18 @@ def send_welcome_email(to_email: str, username: str, referral_code: str = None):
     except Exception as e:
         print(f"Error enviando email: {e}")
 
-def send_invitation_email(to_email: str, inviter_name: str = "El equipo"):
+def send_invitation_email(
+    to_email: str,
+    inviter_name: str = "El equipo",
+    referral_code: Optional[str] = None,
+    invited_role: str = "supervisor"
+):
     # Configuración básica, ajustar con variables de entorno
     smtp_server = os.getenv("SMTP_SERVER", "smtp.zoho.com")
     smtp_port = int(os.getenv("SMTP_PORT", 587))
     smtp_user = os.getenv("SMTP_USER")
     smtp_password = os.getenv("SMTP_PASSWORD")
+    frontend_url = os.getenv("FRONTEND_URL", "https://esquel-ahorra.online")
 
     if not smtp_user or not smtp_password:
         print(f"Email de invitación a {to_email}: ¡Únete a Esquel ahorra!")
@@ -81,9 +88,13 @@ def send_invitation_email(to_email: str, inviter_name: str = "El equipo"):
 
     # Crear mensaje multipart para HTML
     msg = MIMEMultipart("alternative")
-    msg['Subject'] = "¡Te invitamos a unirte a Esquel ahorra!"
-    msg['From'] = smtp_user
+    msg['Subject'] = "Invitación para unirte a Esquel Ahorra"
+    msg['From'] = f"Esquel Ahorra <{smtp_user}>"
     msg['To'] = to_email
+
+    invite_link = f"{frontend_url}/register"
+    if referral_code:
+        invite_link = f"{frontend_url}/register?ref={referral_code}"
 
     # Contenido HTML
     html = f"""
@@ -91,7 +102,9 @@ def send_invitation_email(to_email: str, inviter_name: str = "El equipo"):
     <body>
         <h2>¡Hola!</h2>
         <p>{inviter_name} te invita a unirte a Esquel ahorra, la plataforma donde encuentras las mejores ofertas y precios en productos locales.</p>
-        <p>Regístrate hoy y comienza a ahorrar en tus compras diarias.</p>
+        <p>Usá este enlace para registrarte:</p>
+        <p style="word-break: break-all;"><strong><a href="{invite_link}">{invite_link}</a></strong></p>
+        <p>Durante el registro, elegí el rol <strong>{invited_role}</strong> y cargá el código de invitación si te lo solicita.</p>
         <p>¡No esperes más, únete a la comunidad!</p>
         <br>
         <p>Saludos,<br>El equipo de Esquel ahorra</p>
