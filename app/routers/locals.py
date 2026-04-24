@@ -5,7 +5,8 @@ from typing import List
 import logging
 from app.database import get_db
 from app.models.local import Local as LocalModel
-from app.schemas.local import Local, LocalCreate
+from app.models.product import Product as ProductModel, Price as PriceModel
+from app.schemas.local import Local, LocalCreate, LocalConProductos
 from app.utils import get_current_user
 from app.models.user import User
 
@@ -58,3 +59,56 @@ def read_local(local_id: int, db: Session = Depends(get_db)):
     if db_local is None:
         raise HTTPException(status_code=404, detail="Local no encontrado")
     return db_local
+
+@router.get("/{local_id}/productos", response_model=LocalConProductos)
+def read_local_with_products(local_id: int, db: Session = Depends(get_db)):
+    """
+    Obtiene los detalles de una tienda junto con todos sus productos y precios.
+    """
+    # Obtener la tienda
+    db_local = db.query(LocalModel).filter(LocalModel.id == local_id).first()
+    if db_local is None:
+        raise HTTPException(status_code=404, detail="Local no encontrado")
+    
+    try:
+        # Obtener todos los productos con precios para este local
+        prices = db.query(
+            ProductModel.id,
+            ProductModel.nombre,
+            PriceModel.precio
+        ).join(
+            PriceModel, ProductModel.id == PriceModel.product_id
+        ).filter(
+            PriceModel.local_id == local_id
+        ).all()
+        
+        # Convertir los resultados a lista de diccionarios
+        productos = [
+            {
+                "id": precio[0],
+                "nombre": precio[1],
+                "precio": precio[2]
+            }
+            for precio in prices
+        ]
+        
+        return {
+            "id": db_local.id,
+            "nombre": db_local.nombre,
+            "direccion": db_local.direccion,
+            "telefono": db_local.telefono,
+            "is_active": db_local.is_active,
+            "productos": productos
+        }
+    except SQLAlchemyError as e:
+        logger.error(f"Error en base de datos al obtener productos del local: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al obtener los productos del local"
+        )
+    except Exception as e:
+        logger.error(f"Error inesperado: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error inesperado"
+        )
