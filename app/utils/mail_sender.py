@@ -94,7 +94,9 @@ def send_invitation_email(
 
     invite_link = f"{frontend_url}/register"
     if referral_code:
-        invite_link = f"{frontend_url}/register?ref={referral_code}"
+        invite_link = f"{frontend_url}/register?ref={referral_code}&rol={invited_role}"
+    else:
+        invite_link = f"{frontend_url}/register?rol={invited_role}"
 
     # Contenido HTML
     html = f"""
