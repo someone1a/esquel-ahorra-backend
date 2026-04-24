@@ -16,7 +16,7 @@ from app.utils import (
 )
 from app.models import user as models
 from app.utils import get_password_hash
-from app.utils.mail_sender import send_welcome_email
+from app.utils.mail_sender import send_invitation_email, send_welcome_email
 from app.models.price_correction import PriceCorrection
 import logging
 
@@ -261,8 +261,6 @@ async def get_me(
             detail="Error al obtener los datos del usuario"
         )
 
-@router.get("/invite")
-@router.post("/invite")
 @router.get("/invite-link")
 async def get_invite_link(
     current_user: models.User = Depends(get_current_user),
@@ -279,3 +277,43 @@ async def get_invite_link(
     base_url = os.getenv("FRONTEND_URL", "https://esquel-ahorra.online")
     invite_link = f"{base_url}/register?ref={current_user.referral_code}"
     return {"invite_link": invite_link, "referral_code": current_user.referral_code}
+
+@router.get("/invite")
+async def get_invite_link_alias(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return await get_invite_link(current_user=current_user, db=db)
+
+@router.post("/invite")
+async def invite_supervisor(
+    invite_data: schemas.InviteSupervisorRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.rol != "supervisor":
+        raise HTTPException(status_code=403, detail="No tienes permisos para invitar supervisores")
+
+    if not current_user.referral_code:
+        import uuid
+        current_user.referral_code = str(uuid.uuid4())[:8]
+        db.commit()
+        db.refresh(current_user)
+
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    if not smtp_user or not smtp_password:
+        raise HTTPException(status_code=500, detail="SMTP no configurado (SMTP_USER/SMTP_PASSWORD)")
+
+    try:
+        inviter_name = f"{current_user.name} {current_user.lastname}".strip()
+        send_invitation_email(
+            to_email=invite_data.email,
+            inviter_name=inviter_name or "El equipo",
+            referral_code=current_user.referral_code,
+            invited_role="supervisor"
+        )
+        return {"detail": "Invitación enviada"}
+    except Exception as e:
+        logger.error(f"Error al enviar invitación a {invite_data.email}: {str(e)}")
+        raise HTTPException(status_code=500, detail="No se pudo enviar la invitación")

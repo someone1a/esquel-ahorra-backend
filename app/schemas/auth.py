@@ -32,3 +32,6 @@ class UserProfile(BaseModel):
 
     class Config:
         from_attributes = True
+
+class InviteSupervisorRequest(BaseModel):
+    email: EmailStr

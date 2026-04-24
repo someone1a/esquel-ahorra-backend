@@ -42,7 +42,7 @@ def send_welcome_email(to_email: str, username: str, referral_code: str = None):
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #2c3e50;">¡Bienvenido a Esquel ahorra, {username}!</h2>
             <p>Gracias por registrarte en nuestra plataforma. Estamos emocionados de tenerte con nosotros.</p>
-            <p>En Esquel ahorra, encontrarás las mejores ofertas y precios en productos locales.</p>
+            <p>En Esquel ahorra, encontrarás las mejores ofertas y precios en productos en locales de la zona.</p>
             
             {referral_section}
 
