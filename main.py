@@ -8,6 +8,7 @@ import logging
 
 from app.database import engine, Base, create_tables, verify_database_connection
 from app.routers import products, auth, locals
+from app.models.token_blacklist import TokenBlacklist
 
 # Configurar logging
 logging.basicConfig(
