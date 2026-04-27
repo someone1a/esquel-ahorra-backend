@@ -7,19 +7,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+PRIVILEGED_ROLES = ["supervisor", "admin"]
+
 def create_product(db: Session, product: ProductCreate):
     try:
-        # Crear el producto
         db_product = Product(nombre=product.nombre)
         db.add(db_product)
-        db.flush()  # Para obtener el id
+        db.flush()
         
-        # Crear el barcode
         db_barcode = Barcode(codigo_barra=product.codigo_barra, product_id=db_product.id)
         db.add(db_barcode)
         db.flush()
         
-        # Crear el precio
         db_price = Price(product_id=db_product.id, local_id=product.local_id, precio=product.precio)
         db.add(db_price)
         
@@ -54,16 +53,14 @@ def get_product_by_barcode(db: Session, codigo_barra: str):
 
 def update_product_price(db: Session, product_id: int, update: ProductUpdate, user_id: int, user_role: str):
     try:
-        # Buscar el precio existente para este producto y local
         price = db.query(Price).filter(Price.product_id == product_id, Price.local_id == update.local_id).first()
         
-        if user_role == "supervisor":
-            # Supervisores pueden actualizar directamente sin restricciones
+        if user_role in PRIVILEGED_ROLES:
+            # Supervisores y admins actualizan directamente sin aprobación
             if price:
                 old_price = price.precio
                 price.precio = update.precio
             else:
-                # Si no existe, crear uno nuevo
                 price = Price(product_id=product_id, local_id=update.local_id, precio=update.precio)
                 db.add(price)
                 old_price = 0
@@ -74,14 +71,14 @@ def update_product_price(db: Session, product_id: int, update: ProductUpdate, us
                 new_price=update.precio,
                 local_id=update.local_id,
                 user_id=user_id,
-                status="approved"  # Aprobado automáticamente para supervisores
+                status="approved"
             )
             db.add(correction)
             db.commit()
             db.refresh(price)
             return price.product
         else:
-            # Usuarios normales requieren aprobación para ser más estrictos
+            # Usuarios normales requieren aprobación
             old_price = price.precio if price else 0
             correction = PriceCorrection(
                 product_id=product_id,
@@ -93,7 +90,6 @@ def update_product_price(db: Session, product_id: int, update: ProductUpdate, us
             )
             db.add(correction)
             db.commit()
-            # No actualizar el precio aún, esperar aprobación
             return db.query(Product).filter(Product.id == product_id).first()
     except SQLAlchemyError as e:
         db.rollback()
@@ -123,12 +119,10 @@ def approve_price_correction(db: Session, correction_id: int):
         if correction.status != "pending":
             raise ValueError("La corrección ya ha sido procesada")
         
-        # Actualizar el precio
         price = db.query(Price).filter(Price.product_id == correction.product_id, Price.local_id == correction.local_id).first()
         if price:
             price.precio = correction.new_price
         else:
-            # Crear precio si no existe
             price = Price(product_id=correction.product_id, local_id=correction.local_id, precio=correction.new_price)
             db.add(price)
         

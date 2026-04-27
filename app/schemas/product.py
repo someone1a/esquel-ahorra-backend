@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 from typing import List, Optional
 
 class ProductBase(BaseModel):
@@ -62,7 +63,7 @@ class PriceCorrectionBase(BaseModel):
 
 class PriceCorrection(PriceCorrectionBase):
     id: int
-    timestamp: str
+    timestamp: datetime  # era str, ahora datetime
 
     class Config:
         from_attributes = True

@@ -10,8 +10,9 @@ from app.schemas.local import Local, LocalCreate, LocalConProductos
 from app.utils import get_current_user
 from app.models.user import User
 
-# Configurar logging
 logger = logging.getLogger(__name__)
+
+PRIVILEGED_ROLES = ["supervisor", "admin"]
 
 router = APIRouter(
     prefix="/locals",
@@ -20,12 +21,11 @@ router = APIRouter(
 
 @router.post("/", response_model=Local)
 def create_local(
-    local: LocalCreate, 
+    local: LocalCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Solo vendedores o supervisores pueden crear locales
-    if current_user.rol not in ["vendedor", "supervisor"]:
+    if current_user.rol not in ["vendedor", "supervisor", "admin"]:
         raise HTTPException(status_code=403, detail="No tienes permisos para crear locales")
     
     try:
@@ -50,8 +50,7 @@ def create_local(
 
 @router.get("/", response_model=List[Local])
 def read_locals(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    locals_list = db.query(LocalModel).offset(skip).limit(limit).all()
-    return locals_list
+    return db.query(LocalModel).offset(skip).limit(limit).all()
 
 @router.get("/{local_id}", response_model=Local)
 def read_local(local_id: int, db: Session = Depends(get_db)):
@@ -62,16 +61,11 @@ def read_local(local_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{local_id}/productos", response_model=LocalConProductos)
 def read_local_with_products(local_id: int, db: Session = Depends(get_db)):
-    """
-    Obtiene los detalles de una tienda junto con todos sus productos y precios.
-    """
-    # Obtener la tienda
     db_local = db.query(LocalModel).filter(LocalModel.id == local_id).first()
     if db_local is None:
         raise HTTPException(status_code=404, detail="Local no encontrado")
     
     try:
-        # Obtener todos los productos con precios para este local
         prices = db.query(
             ProductModel.id,
             ProductModel.nombre,
@@ -82,14 +76,9 @@ def read_local_with_products(local_id: int, db: Session = Depends(get_db)):
             PriceModel.local_id == local_id
         ).all()
         
-        # Convertir los resultados a lista de diccionarios
         productos = [
-            {
-                "id": precio[0],
-                "nombre": precio[1],
-                "precio": precio[2]
-            }
-            for precio in prices
+            {"id": p[0], "nombre": p[1], "precio": p[2]}
+            for p in prices
         ]
         
         return {

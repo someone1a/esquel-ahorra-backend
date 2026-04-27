@@ -11,14 +11,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+PRIVILEGED_ROLES = ["supervisor", "admin"]
+
 router = APIRouter(
     tags=["products"]
 )
 
 @router.post("/products", response_model=Product)
 def create_product_endpoint(product: ProductCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Solo supervisores pueden crear productos
-    if current_user.rol != "supervisor":
+    if current_user.rol not in PRIVILEGED_ROLES:
         raise HTTPException(status_code=403, detail="No tienes permisos para crear productos")
     
     try:
@@ -91,8 +92,7 @@ def get_corrections_count_endpoint(local_id: int, db: Session = Depends(get_db),
 
 @router.get("/corrections/pending", response_model=List[PriceCorrection])
 def get_pending_corrections_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Solo supervisores pueden ver correcciones pendientes
-    if current_user.rol != "supervisor":
+    if current_user.rol not in PRIVILEGED_ROLES:
         raise HTTPException(status_code=403, detail="No tienes permisos para ver correcciones pendientes")
     
     try:
@@ -106,8 +106,7 @@ def get_pending_corrections_endpoint(db: Session = Depends(get_db), current_user
 
 @router.put("/corrections/{correction_id}/approve")
 def approve_correction(correction_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Solo supervisores pueden aprobar correcciones
-    if current_user.rol != "supervisor":
+    if current_user.rol not in PRIVILEGED_ROLES:
         raise HTTPException(status_code=403, detail="No tienes permisos para aprobar correcciones")
     
     try:
