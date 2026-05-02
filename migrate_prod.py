@@ -204,12 +204,29 @@ def migrate():
             # Agregar índices faltantes
             logger.info("Verificando índices...")
             try:
-                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_product_local` ON `prices` (`product_id`, `local_id`)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_created_by` ON `prices` (`created_by`)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_updated_by` ON `prices` (`updated_by`)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_product_local_verified` ON `prices` (`product_id`, `local_id`, `verificado`)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_correction_status` ON `price_corrections` (`status`)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_correction_user` ON `price_corrections` (`user_id`)")
+                cursor.execute("SHOW INDEX FROM `prices` WHERE Key_name='idx_price_product_local'")
+                if not cursor.fetchone():
+                    cursor.execute("CREATE INDEX `idx_price_product_local` ON `prices` (`product_id`, `local_id`)")
+
+                cursor.execute("SHOW INDEX FROM `prices` WHERE Key_name='idx_price_created_by'")
+                if not cursor.fetchone():
+                    cursor.execute("CREATE INDEX `idx_price_created_by` ON `prices` (`created_by`)")
+
+                cursor.execute("SHOW INDEX FROM `prices` WHERE Key_name='idx_price_updated_by'")
+                if not cursor.fetchone():
+                    cursor.execute("CREATE INDEX `idx_price_updated_by` ON `prices` (`updated_by`)")
+
+                cursor.execute("SHOW INDEX FROM `prices` WHERE Key_name='idx_price_product_local_verified'")
+                if not cursor.fetchone():
+                    cursor.execute("CREATE INDEX `idx_price_product_local_verified` ON `prices` (`product_id`, `local_id`, `verificado`)")
+
+                cursor.execute("SHOW INDEX FROM `price_corrections` WHERE Key_name='idx_price_correction_status'")
+                if not cursor.fetchone():
+                    cursor.execute("CREATE INDEX `idx_price_correction_status` ON `price_corrections` (`status`)")
+
+                cursor.execute("SHOW INDEX FROM `price_corrections` WHERE Key_name='idx_price_correction_user'")
+                if not cursor.fetchone():
+                    cursor.execute("CREATE INDEX `idx_price_correction_user` ON `price_corrections` (`user_id`)")
             except Exception as e:
                 logger.error(f"Error al crear índices: {e}")
 
