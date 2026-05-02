@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.token_blacklist import TokenBlacklist
 import os
 import uuid
+import logging
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
@@ -21,11 +22,24 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt", "argon2", "scrypt"],
+    deprecated="auto",
+    default="pbkdf2_sha256"
+)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    if not hashed_password or not isinstance(hashed_password, str):
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        # Log the error for debugging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Password verification failed for user with hash starting with: {str(hashed_password)[:20]}... Error: {e}")
+        # Return False instead of raising to prevent 500 errors
+        return False
 
 def get_password_hash(password):
     return pwd_context.hash(password)
