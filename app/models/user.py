@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.models.product import Price
 import uuid
 
 class User(Base):
@@ -17,6 +18,9 @@ class User(Base):
     referred_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     referred_by = relationship("User", remote_side=[id], backref="referrals")
+    created_prices = relationship("Price", foreign_keys=[Price.created_by], back_populates="creator")
+    updated_prices = relationship("Price", foreign_keys=[Price.updated_by], back_populates="updater")
+    verified_prices = relationship("Price", foreign_keys=[Price.verificado_por], back_populates="verificador")
     created_prices = relationship("Price", foreign_keys="Price.created_by", back_populates="creator")
     updated_prices = relationship("Price", foreign_keys="Price.updated_by", back_populates="updater")
     verified_prices = relationship("Price", foreign_keys="Price.verificado_por", back_populates="verificador")
