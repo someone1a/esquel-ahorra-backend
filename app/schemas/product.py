@@ -4,6 +4,10 @@ from typing import List, Optional
 
 class ProductBase(BaseModel):
     nombre: str
+    marca: Optional[str] = None
+    presentacion: Optional[str] = None
+    categoria: Optional[str] = None
+    imagen_url: Optional[str] = None
 
 class BarcodeBase(BaseModel):
     codigo_barra: str
@@ -32,6 +36,12 @@ class PriceBase(BaseModel):
     product_id: int
     local_id: int
     precio: float
+    created_at: datetime
+    updated_at: datetime
+    updated_by: Optional[int] = None
+    verificado: str = "no"
+    verificado_por: Optional[int] = None
+    verificado_en: Optional[datetime] = None
 
 class Price(PriceBase):
     id: int

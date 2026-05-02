@@ -1,13 +1,19 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from app.models.product import Product, Price, Barcode
+from app.models.product import Product, Price, Barcode, PriceHistory
 from app.models.price_correction import PriceCorrection
+from app.models.user import User
 from app.schemas.product import ProductCreate, ProductUpdate, ProductSearchResponse
 import logging
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
 PRIVILEGED_ROLES = ["supervisor", "admin"]
+
+def normalize_text(text: str) -> str:
+    """Normaliza texto: lowercase y sin acentos."""
+    return unicodedata.normalize('NFD', text.lower()).encode('ascii', 'ignore').decode('ascii')
 
 def create_product(db: Session, product: ProductCreate):
     try:
@@ -105,7 +111,10 @@ def get_corrections_count(db: Session, local_id: int):
 
 def search_products_by_name(db: Session, query: str):
     try:
-        return db.query(Product).filter(Product.nombre.ilike(f"%{query}%")).all()
+        normalized_query = normalize_text(query)
+        return db.query(Product).filter(
+            Product.nombre.ilike(f"%{normalized_query}%")
+        ).all()
     except SQLAlchemyError as e:
         logger.error(f"Error en base de datos al buscar productos por nombre: {str(e)}")
         raise ValueError("Error al buscar productos por nombre")
@@ -120,11 +129,28 @@ def approve_price_correction(db: Session, correction_id: int):
             raise ValueError("La corrección ya ha sido procesada")
         
         price = db.query(Price).filter(Price.product_id == correction.product_id, Price.local_id == correction.local_id).first()
+        old_price = price.precio if price else 0
+        
         if price:
             price.precio = correction.new_price
+            price.updated_by = correction.user_id
         else:
-            price = Price(product_id=correction.product_id, local_id=correction.local_id, precio=correction.new_price)
+            price = Price(product_id=correction.product_id, local_id=correction.local_id, precio=correction.new_price, updated_by=correction.user_id)
             db.add(price)
+        
+        # Guardar en historial
+        history = PriceHistory(
+            price_id=price.id,
+            old_price=old_price,
+            new_price=correction.new_price,
+            changed_by=correction.user_id
+        )
+        db.add(history)
+        
+        # Sumar puntos al usuario
+        user = db.query(User).filter(User.id == correction.user_id).first()
+        if user:
+            user.points += 10  # Puntos por corrección aprobada
         
         correction.status = "approved"
         db.commit()
@@ -168,3 +194,32 @@ def search_products(db: Session, barcode: str = None, name: str = None):
     except SQLAlchemyError as e:
         logger.error(f"Error en base de datos al buscar productos: {str(e)}")
         raise ValueError("Error al buscar productos")
+
+def get_product_prices(db: Session, product_id: int):
+    try:
+        return db.query(Price).filter(Price.product_id == product_id).all()
+    except SQLAlchemyError as e:
+        logger.error(f"Error al obtener precios del producto {product_id}: {str(e)}")
+        raise ValueError("Error al obtener precios")
+
+def get_product_compare(db: Session, product_id: int):
+    try:
+        prices = db.query(Price).filter(Price.product_id == product_id).order_by(Price.precio.asc()).all()
+        return prices
+    except SQLAlchemyError as e:
+        logger.error(f"Error al comparar precios del producto {product_id}: {str(e)}")
+        raise ValueError("Error al comparar precios")
+
+def get_local_prices(db: Session, local_id: int):
+    try:
+        return db.query(Price).filter(Price.local_id == local_id).all()
+    except SQLAlchemyError as e:
+        logger.error(f"Error al obtener precios del local {local_id}: {str(e)}")
+        raise ValueError("Error al obtener precios del local")
+
+def get_user_corrections(db: Session, user_id: int):
+    try:
+        return db.query(PriceCorrection).filter(PriceCorrection.user_id == user_id).all()
+    except SQLAlchemyError as e:
+        logger.error(f"Error al obtener correcciones del usuario {user_id}: {str(e)}")
+        raise ValueError("Error al obtener correcciones")

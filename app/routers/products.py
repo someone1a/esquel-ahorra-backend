@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from typing import List
 from app.database import get_db
 from app.schemas.product import ProductCreate, Product, ProductUpdate, ProductSearchRequest, ProductSearchResponse, PriceCorrection
-from app.services.products import create_product, get_product, get_product_by_barcode, update_product_price, get_corrections_count, search_products, search_products_by_name, approve_price_correction, get_pending_corrections
+from app.services.products import create_product, get_product, get_product_by_barcode, update_product_price, get_corrections_count, search_products, search_products_by_name, approve_price_correction, get_pending_corrections, get_product_prices, get_product_compare, get_local_prices, get_user_corrections
 from app.utils import get_current_user
 from app.models.user import User
 import logging
@@ -117,3 +117,50 @@ def approve_correction(correction_id: int, db: Session = Depends(get_db), curren
     except Exception as e:
         logger.error(f"Error al aprobar corrección: {str(e)}")
         raise HTTPException(status_code=500, detail="Error al aprobar la corrección")
+
+@router.get("/products/{product_id}/prices")
+def get_product_prices_endpoint(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        prices = get_product_prices(db, product_id)
+        return prices
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error al obtener precios del producto {product_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al obtener precios")
+
+@router.get("/products/{product_id}/compare")
+def get_product_compare_endpoint(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        prices = get_product_compare(db, product_id)
+        return prices
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error al comparar precios del producto {product_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al comparar precios")
+
+@router.get("/locals/{local_id}/prices")
+def get_local_prices_endpoint(local_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        prices = get_local_prices(db, local_id)
+        return prices
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error al obtener precios del local {local_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al obtener precios del local")
+
+@router.get("/users/{user_id}/corrections")
+def get_user_corrections_endpoint(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.id != user_id and current_user.rol not in PRIVILEGED_ROLES:
+        raise HTTPException(status_code=403, detail="No tienes permisos para ver las correcciones de este usuario")
+    
+    try:
+        corrections = get_user_corrections(db, user_id)
+        return corrections
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error al obtener correcciones del usuario {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al obtener correcciones")

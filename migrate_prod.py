@@ -36,7 +36,24 @@ def migrate():
         )
 
         with connection.cursor() as cursor:
-            # 1. Crear tabla 'locals' si no existe
+            # 1. Crear tabla 'users' si no existe
+            logger.info("Verificando tabla 'users'...")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `users` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `email` VARCHAR(255) UNIQUE NOT NULL,
+                    `name` VARCHAR(255) NOT NULL,
+                    `lastname` VARCHAR(255) NOT NULL,
+                    `hashed_password` VARCHAR(255) NOT NULL,
+                    `rol` VARCHAR(50) NOT NULL,
+                    `points` INT DEFAULT 0,
+                    `referral_code` VARCHAR(50) UNIQUE DEFAULT '',
+                    `referred_by_id` INT,
+                    FOREIGN KEY (`referred_by_id`) REFERENCES `users`(`id`)
+                )
+            """)
+
+            # 2. Crear tabla 'locals' si no existe
             logger.info("Verificando tabla 'locals'...")
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS `locals` (
@@ -48,45 +65,148 @@ def migrate():
                 )
             """)
 
-            # 2. Actualizar tabla 'users'
-            logger.info("Actualizando tabla 'users'...")
-            columns_to_add_users = [
-                ("points", "INT DEFAULT 0"),
-                ("referral_code", "VARCHAR(50) UNIQUE"),
-                ("referred_by_id", "INT, ADD FOREIGN KEY (referred_by_id) REFERENCES users(id)")
+            # 3. Crear tabla 'products' si no existe
+            logger.info("Verificando tabla 'products'...")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `products` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `nombre` VARCHAR(255) NOT NULL,
+                    `marca` VARCHAR(255),
+                    `presentacion` VARCHAR(255),
+                    `categoria` VARCHAR(255),
+                    `imagen_url` VARCHAR(500)
+                )
+            """)
+
+            # 4. Crear tabla 'barcodes' si no existe
+            logger.info("Verificando tabla 'barcodes'...")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `barcodes` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `codigo_barra` VARCHAR(255) UNIQUE NOT NULL,
+                    `product_id` INT NOT NULL,
+                    FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE CASCADE,
+                    INDEX `idx_codigo_barra` (`codigo_barra`)
+                )
+            """)
+
+            # 5. Crear tabla 'prices' si no existe
+            logger.info("Verificando tabla 'prices'...")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `prices` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `product_id` INT NOT NULL,
+                    `local_id` INT NOT NULL,
+                    `precio` FLOAT NOT NULL,
+                    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    `updated_by` INT,
+                    `verificado` VARCHAR(10) DEFAULT 'no',
+                    `verificado_por` INT,
+                    `verificado_en` DATETIME,
+                    FOREIGN KEY (`product_id`) REFERENCES `products`(`id`),
+                    FOREIGN KEY (`local_id`) REFERENCES `locals`(`id`),
+                    FOREIGN KEY (`updated_by`) REFERENCES `users`(`id`),
+                    FOREIGN KEY (`verificado_por`) REFERENCES `users`(`id`),
+                    INDEX `idx_price_product_local` (`product_id`, `local_id`),
+                    INDEX `idx_price_updated_by` (`updated_by`),
+                    INDEX `idx_price_product_local_verified` (`product_id`, `local_id`, `verificado`)
+                )
+            """)
+
+            # 6. Crear tabla 'price_corrections' si no existe
+            logger.info("Verificando tabla 'price_corrections'...")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `price_corrections` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `product_id` INT NOT NULL,
+                    `old_price` FLOAT NOT NULL,
+                    `new_price` FLOAT NOT NULL,
+                    `local_id` INT NOT NULL,
+                    `user_id` INT NOT NULL,
+                    `status` VARCHAR(20) DEFAULT 'pending',
+                    `timestamp` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (`product_id`) REFERENCES `products`(`id`),
+                    FOREIGN KEY (`local_id`) REFERENCES `locals`(`id`),
+                    FOREIGN KEY (`user_id`) REFERENCES `users`(`id`),
+                    INDEX `idx_price_correction_status` (`status`),
+                    INDEX `idx_price_correction_user` (`user_id`)
+                )
+            """)
+
+            # 7. Crear tabla 'price_history' si no existe
+            logger.info("Verificando tabla 'price_history'...")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `price_history` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `price_id` INT NOT NULL,
+                    `old_price` FLOAT NOT NULL,
+                    `new_price` FLOAT NOT NULL,
+                    `changed_by` INT NOT NULL,
+                    `changed_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (`price_id`) REFERENCES `prices`(`id`),
+                    FOREIGN KEY (`changed_by`) REFERENCES `users`(`id`)
+                )
+            """)
+
+            # 8. Crear tabla 'token_blacklist' si no existe
+            logger.info("Verificando tabla 'token_blacklist'...")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `token_blacklist` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `jti` VARCHAR(255) UNIQUE NOT NULL,
+                    `expires_at` DATETIME NOT NULL,
+                    INDEX `idx_jti` (`jti`),
+                    INDEX `idx_expires_at` (`expires_at`)
+                )
+            """)
+
+            # Migraciones adicionales para tablas existentes
+            logger.info("Aplicando migraciones adicionales...")
+
+            # Agregar columnas faltantes a 'products' si no existen
+            columns_to_add_products = [
+                ("marca", "VARCHAR(255)"),
+                ("presentacion", "VARCHAR(255)"),
+                ("categoria", "VARCHAR(255)"),
+                ("imagen_url", "VARCHAR(500)")
             ]
             
-            for col_name, col_def in columns_to_add_users:
-                cursor.execute(f"SHOW COLUMNS FROM `users` LIKE '{col_name}'")
+            for col_name, col_def in columns_to_add_products:
+                cursor.execute(f"SHOW COLUMNS FROM `products` LIKE '{col_name}'")
                 if not cursor.fetchone():
-                    logger.info(f"Añadiendo columna '{col_name}' a 'users'...")
-                    try:
-                        cursor.execute(f"ALTER TABLE `users` ADD COLUMN {col_name} {col_def}")
-                    except Exception as e:
-                        logger.error(f"Error al añadir {col_name}: {e}")
+                    logger.info(f"Añadiendo columna '{col_name}' a 'products'...")
+                    cursor.execute(f"ALTER TABLE `products` ADD COLUMN `{col_name}` {col_def}")
 
-            # 3. Actualizar tabla 'price_corrections'
-            logger.info("Actualizando tabla 'price_corrections'...")
-            columns_to_add_corrections = [
-                ("user_id", "INT NOT NULL, ADD FOREIGN KEY (user_id) REFERENCES users(id)"),
-                ("status", "VARCHAR(20) DEFAULT 'pending'")
+            # Agregar columnas faltantes a 'prices' si no existen
+            columns_to_add_prices = [
+                ("created_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+                ("updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                ("updated_by", "INT, ADD FOREIGN KEY (`updated_by`) REFERENCES `users`(`id`)"),
+                ("verificado", "VARCHAR(10) DEFAULT 'no'"),
+                ("verificado_por", "INT, ADD FOREIGN KEY (`verificado_por`) REFERENCES `users`(`id`)"),
+                ("verificado_en", "DATETIME")
             ]
-
-            for col_name, col_def in columns_to_add_corrections:
-                cursor.execute(f"SHOW COLUMNS FROM `price_corrections` LIKE '{col_name}'")
+            
+            for col_name, col_def in columns_to_add_prices:
+                cursor.execute(f"SHOW COLUMNS FROM `prices` LIKE '{col_name}'")
                 if not cursor.fetchone():
-                    logger.info(f"Añadiendo columna '{col_name}' a 'price_corrections'...")
+                    logger.info(f"Añadiendo columna '{col_name}' a 'prices'...")
                     try:
-                        # Para user_id, si hay datos previos, esto podría fallar si no hay un usuario por defecto
-                        # Vamos a permitir NULL temporalmente o asignar al primer usuario si existe
-                        if col_name == "user_id":
-                            cursor.execute("ALTER TABLE `price_corrections` ADD COLUMN user_id INT NULL")
-                            cursor.execute("ALTER TABLE `price_corrections` ADD FOREIGN KEY (user_id) REFERENCES users(id)")
-                            logger.warning("Columna 'user_id' añadida como NULLABLE para evitar errores con datos existentes")
-                        else:
-                            cursor.execute(f"ALTER TABLE `price_corrections` ADD COLUMN {col_name} {col_def}")
+                        cursor.execute(f"ALTER TABLE `prices` ADD COLUMN `{col_name}` {col_def}")
                     except Exception as e:
                         logger.error(f"Error al añadir {col_name}: {e}")
+
+            # Agregar índices faltantes
+            logger.info("Verificando índices...")
+            try:
+                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_product_local` ON `prices` (`product_id`, `local_id`)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_updated_by` ON `prices` (`updated_by`)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_product_local_verified` ON `prices` (`product_id`, `local_id`, `verificado`)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_correction_status` ON `price_corrections` (`status`)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_correction_user` ON `price_corrections` (`user_id`)")
+            except Exception as e:
+                logger.error(f"Error al crear índices: {e}")
 
         connection.commit()
         logger.info("✓ Migración completada exitosamente")

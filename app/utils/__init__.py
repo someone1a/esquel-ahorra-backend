@@ -11,13 +11,17 @@ from app.models.token_blacklist import TokenBlacklist
 import os
 import uuid
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
-REFRESH_SECRET_KEY = os.getenv("REFRESH_SECRET_KEY", "your-refresh-secret-key")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is required")
+REFRESH_SECRET_KEY = os.getenv("REFRESH_SECRET_KEY")
+if not REFRESH_SECRET_KEY:
+    raise ValueError("REFRESH_SECRET_KEY environment variable is required")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def verify_password(plain_password, hashed_password):

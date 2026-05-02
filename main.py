@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 import os
 from dotenv import load_dotenv
 import logging
@@ -10,12 +11,28 @@ from app.database import engine, Base, create_tables, verify_database_connection
 from app.routers import products, auth, locals
 from app.models.token_blacklist import TokenBlacklist
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
+
+# Middleware para limitar tamaño de request
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, max_size: int = 10 * 1024 * 1024):  # 10MB default
+        super().__init__(app)
+        self.max_size = max_size
+
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get('content-length')
+        if content_length:
+            try:
+                size = int(content_length)
+                if size > self.max_size:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": "Request too large"}
+                    )
+            except ValueError:
+                pass
+        response = await call_next(request)
+        return response
 
 # Carga de variables de entorno
 load_dotenv()
@@ -24,7 +41,8 @@ load_dotenv()
 required_env_vars = ["SECRET_KEY", "REFRESH_SECRET_KEY"]
 missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 if missing_vars:
-    logger.warning(f"Variables de entorno faltantes: {missing_vars}")
+    logger.error(f"Variables de entorno faltantes: {missing_vars}")
+    raise ValueError(f"Required environment variables are missing: {missing_vars}")
 
 # Crear la aplicación FastAPI
 app = FastAPI(
@@ -58,12 +76,16 @@ try:
 except Exception as e:
     logger.error(f"Error al verificar conexión: {str(e)}")
 
+# Agregar middleware de límite de tamaño de request
+app.add_middleware(RequestSizeLimitMiddleware)
+
+# Configurar CORS con métodos y headers específicos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:8081","https://esquel-ahorra.online"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "Accept"]
 )
 
 # Incluir routers
