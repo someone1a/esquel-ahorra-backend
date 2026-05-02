@@ -100,15 +100,18 @@ def migrate():
                     `precio` FLOAT NOT NULL,
                     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
                     `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    `created_by` INT,
                     `updated_by` INT,
                     `verificado` VARCHAR(10) DEFAULT 'no',
                     `verificado_por` INT,
                     `verificado_en` DATETIME,
                     FOREIGN KEY (`product_id`) REFERENCES `products`(`id`),
                     FOREIGN KEY (`local_id`) REFERENCES `locals`(`id`),
+                    FOREIGN KEY (`created_by`) REFERENCES `users`(`id`),
                     FOREIGN KEY (`updated_by`) REFERENCES `users`(`id`),
                     FOREIGN KEY (`verificado_por`) REFERENCES `users`(`id`),
                     INDEX `idx_price_product_local` (`product_id`, `local_id`),
+                    INDEX `idx_price_created_by` (`created_by`),
                     INDEX `idx_price_updated_by` (`updated_by`),
                     INDEX `idx_price_product_local_verified` (`product_id`, `local_id`, `verificado`)
                 )
@@ -182,6 +185,7 @@ def migrate():
             columns_to_add_prices = [
                 ("created_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
                 ("updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                ("created_by", "INT, ADD FOREIGN KEY (`created_by`) REFERENCES `users`(`id`)"),
                 ("updated_by", "INT, ADD FOREIGN KEY (`updated_by`) REFERENCES `users`(`id`)"),
                 ("verificado", "VARCHAR(10) DEFAULT 'no'"),
                 ("verificado_por", "INT, ADD FOREIGN KEY (`verificado_por`) REFERENCES `users`(`id`)"),
@@ -201,6 +205,7 @@ def migrate():
             logger.info("Verificando índices...")
             try:
                 cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_product_local` ON `prices` (`product_id`, `local_id`)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_created_by` ON `prices` (`created_by`)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_updated_by` ON `prices` (`updated_by`)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_product_local_verified` ON `prices` (`product_id`, `local_id`, `verificado`)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS `idx_price_correction_status` ON `price_corrections` (`status`)")
