@@ -35,6 +35,7 @@ class Price(Base):
     precio = Column(Float, nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     verificado = Column(String(10), default="no")  # 'si', 'no'
     verificado_por = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -43,7 +44,9 @@ class Price(Base):
     # Relaciones
     product = relationship("Product", back_populates="prices")
     local = relationship("Local", backref="prices")
-    updater = relationship("User", backref="updated_prices")
+    creator = relationship("User", foreign_keys=[created_by], back_populates="created_prices")
+    updater = relationship("User", foreign_keys=[updated_by], back_populates="updated_prices")
+    verificador = relationship("User", foreign_keys=[verificado_por], back_populates="verified_prices")
 
 class PriceHistory(Base):
     __tablename__ = "price_history"
