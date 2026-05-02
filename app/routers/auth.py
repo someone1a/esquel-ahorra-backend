@@ -49,12 +49,10 @@ async def login(request: Request, login_data: schemas.LoginRequest, db: Session 
 
 @router.post("/logout")
 async def logout(
-    request: Request,
-    current_user: User = Depends(get_current_user),
+    refresh_token: str,
     db: Session = Depends(get_db),
 ):
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    logout_user(token, db)
+    logout_user(refresh_token, db)
     return {"detail": "Sesión cerrada exitosamente"}
 
 

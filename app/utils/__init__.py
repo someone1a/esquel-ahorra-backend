@@ -18,8 +18,8 @@ REFRESH_SECRET_KEY = os.getenv("REFRESH_SECRET_KEY")
 if not REFRESH_SECRET_KEY:
     raise ValueError("REFRESH_SECRET_KEY environment variable is required")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")

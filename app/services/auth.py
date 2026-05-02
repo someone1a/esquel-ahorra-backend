@@ -175,9 +175,9 @@ def login_user(db: Session, email: str, password: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def logout_user(token: str, db: Session) -> None:
-    """Invalida el access token. Limpieza oportunista de tokens vencidos."""
-    from app.utils import SECRET_KEY  # importación local para evitar circular
-    payload = verify_token(token, SECRET_KEY)
+    """Invalida el refresh token. Limpieza oportunista de tokens vencidos."""
+    from app.utils import REFRESH_SECRET_KEY  # importación local para evitar circular
+    payload = verify_token(token, REFRESH_SECRET_KEY)
     if payload:
         jti = payload.get("jti")
         exp = payload.get("exp")
