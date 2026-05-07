@@ -23,9 +23,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 pwd_context = CryptContext(
-    schemes=["pbkdf2_sha256", "bcrypt", "argon2", "scrypt"],
-    deprecated="auto",
-    default="pbkdf2_sha256"
+    schemes=["bcrypt", "pbkdf2_sha256"],
+    deprecated=["pbkdf2_sha256"],
+    default="bcrypt"
 )
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 

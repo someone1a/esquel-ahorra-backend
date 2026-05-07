@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
+from app.schemas.local import Local as LocalSchema
 
 class ProductBase(BaseModel):
     nombre: str
@@ -23,6 +24,9 @@ class ProductCreate(ProductBase):
     precio: float
     local_id: int
     codigo_barra: str  # Se usa al crear para crear el barcode
+
+class BarcodeCreate(BarcodeBase):
+    pass
 
 class Product(ProductBase):
     id: int
@@ -74,6 +78,36 @@ class PriceCorrectionBase(BaseModel):
 class PriceCorrection(PriceCorrectionBase):
     id: int
     timestamp: datetime  # era str, ahora datetime
+
+    class Config:
+        from_attributes = True
+
+class ProductPriceEntry(BaseModel):
+    local: LocalSchema
+    precio: float
+    updated_at: datetime
+    updated_by: Optional[int] = None
+    verificado: str = "no"
+    verificado_por: Optional[int] = None
+    verificado_en: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ProductCompareResponse(ProductBase):
+    id: int
+    prices: List[ProductPriceEntry]
+
+    class Config:
+        from_attributes = True
+
+class PriceHistoryEntry(BaseModel):
+    id: int
+    price_id: int
+    old_price: float
+    new_price: float
+    changed_by: int
+    changed_at: datetime
 
     class Config:
         from_attributes = True
