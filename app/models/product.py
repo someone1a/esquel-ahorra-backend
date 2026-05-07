@@ -48,16 +48,6 @@ class Price(Base):
     updater = relationship("User", foreign_keys=[updated_by], back_populates="updated_prices")
     verificador = relationship("User", foreign_keys=[verificado_por], back_populates="verified_prices")
 
-class PriceHistory(Base):
-    __tablename__ = "price_history"
-
-    id = Column(Integer, primary_key=True, index=True)
-    price_id = Column(Integer, ForeignKey("prices.id"), nullable=False)
-    old_price = Column(Float, nullable=False)
-    new_price = Column(Float, nullable=False)
-    changed_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    changed_at = Column(DateTime, default=func.now(), nullable=False)
-
 # Índices importantes
 Index('idx_price_product_local', Price.product_id, Price.local_id)
 Index('idx_price_updated_by', Price.updated_by)

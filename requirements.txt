@@ -6,5 +6,6 @@ pymysql
 python-dotenv
 passlib[bcrypt]
 python-jose[cryptography]
+alembic
 email-validator
 secure-smtplib

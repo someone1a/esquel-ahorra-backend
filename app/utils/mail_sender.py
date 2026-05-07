@@ -3,6 +3,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 from typing import Optional
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 def send_welcome_email(to_email: str, username: str, referral_code: str = None):
     # Configuración básica, ajustar con variables de entorno
@@ -13,7 +17,7 @@ def send_welcome_email(to_email: str, username: str, referral_code: str = None):
     frontend_url = os.getenv("FRONTEND_URL", "https://esquel-ahorra.online")
 
     if not smtp_user or not smtp_password:
-        print(f"Email de bienvenida a {to_email}: Bienvenido {username} a Esquel ahorra!")
+        logger.info(f"Email de bienvenida a {to_email}: Bienvenido {username} a Esquel ahorra!")
         return
 
     # Crear mensaje multipart para HTML
@@ -65,9 +69,9 @@ def send_welcome_email(to_email: str, username: str, referral_code: str = None):
         server.login(smtp_user, smtp_password)
         server.sendmail(smtp_user, to_email, msg.as_string())
         server.quit()
-        print(f"Email de bienvenida enviado exitosamente a {to_email}")
+        logger.info(f"Email de bienvenida enviado exitosamente a {to_email}")
     except Exception as e:
-        print(f"Error enviando email: {e}")
+        logger.error(f"Error enviando email: {e}")
 
 def send_invitation_email(
     to_email: str,
@@ -83,7 +87,7 @@ def send_invitation_email(
     frontend_url = os.getenv("FRONTEND_URL", "https://esquel-ahorra.online")
 
     if not smtp_user or not smtp_password:
-        print(f"Email de invitación a {to_email}: ¡Únete a Esquel ahorra!")
+        logger.info(f"Email de invitación a {to_email}: ¡Únete a Esquel ahorra!")
         return
 
     # Crear mensaje multipart para HTML
@@ -124,6 +128,6 @@ def send_invitation_email(
         server.login(smtp_user, smtp_password)
         server.sendmail(smtp_user, to_email, msg.as_string())
         server.quit()
-        print(f"Email de invitación enviado exitosamente a {to_email}")
+        logger.info(f"Email de invitación enviado exitosamente a {to_email}")
     except Exception as e:
-        print(f"Error enviando email: {e}")
+        logger.error(f"Error enviando email: {e}")

@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List
 from app.database import get_db
-from app.schemas.product import ProductCreate, Product, ProductUpdate, ProductSearchRequest, ProductSearchResponse, PriceCorrection
-from app.services.products import create_product, get_product, get_product_by_barcode, update_product_price, get_corrections_count, search_products, search_products_by_name, approve_price_correction, get_pending_corrections, get_product_prices, get_product_compare, get_local_prices, get_user_corrections
+from app.schemas.product import Barcode, BarcodeCreate, PriceCorrection, PriceHistoryEntry, Product, ProductCompareResponse, ProductCreate, ProductPriceEntry, ProductUpdate, ProductSearchResponse
+from app.services.products import add_product_barcode, approve_price_correction, create_product, get_corrections_count, get_local_prices, get_pending_corrections, get_product, get_product_by_barcode, get_product_compare_response, get_product_price_history, get_product_prices_with_locals, get_user_corrections, list_products, search_products, update_product_price
 from app.utils import get_current_user
 from app.models.user import User
 import logging
@@ -16,6 +16,20 @@ PRIVILEGED_ROLES = ["supervisor", "admin"]
 router = APIRouter(
     tags=["products"]
 )
+
+@router.get("/products", response_model=List[Product])
+def list_products_endpoint(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    try:
+        return list_products(db, skip, limit)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error al listar productos: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al listar productos")
 
 @router.post("/products", response_model=Product)
 def create_product_endpoint(product: ProductCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -31,7 +45,7 @@ def create_product_endpoint(product: ProductCreate, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail="Error al crear el producto")
 
 @router.get("/products/search", response_model=ProductSearchResponse)
-def search_products_endpoint(barcode: str = None, name: str = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def search_products_endpoint(barcode: str = None, name: str = None, db: Session = Depends(get_db)):
     try:
         if not barcode and not name:
             raise HTTPException(status_code=400, detail="Debe proporcionar al menos un parámetro: barcode o nombre del producto")
@@ -43,7 +57,7 @@ def search_products_endpoint(barcode: str = None, name: str = None, db: Session 
         raise HTTPException(status_code=500, detail="Error al buscar productos")
 
 @router.get("/products/barcode/{barcode}", response_model=Product)
-def get_product_by_barcode_endpoint(barcode: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_product_by_barcode_endpoint(barcode: str, db: Session = Depends(get_db)):
     try:
         product = get_product_by_barcode(db, barcode)
         if not product:
@@ -56,7 +70,7 @@ def get_product_by_barcode_endpoint(barcode: str, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail="Error al obtener el producto")
 
 @router.get("/products/{product_id}", response_model=Product)
-def read_product(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def read_product(product_id: int, db: Session = Depends(get_db)):
     try:
         product = get_product(db, product_id)
         if not product:
@@ -91,13 +105,18 @@ def get_corrections_count_endpoint(local_id: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail="Error al contar las correcciones")
 
 @router.get("/corrections/pending", response_model=List[PriceCorrection])
-def get_pending_corrections_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_pending_corrections_endpoint(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     if current_user.rol not in PRIVILEGED_ROLES:
         raise HTTPException(status_code=403, detail="No tienes permisos para ver correcciones pendientes")
     
     try:
         corrections = get_pending_corrections(db)
-        return corrections
+        return corrections[skip:skip + limit]
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
@@ -110,7 +129,7 @@ def approve_correction(correction_id: int, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=403, detail="No tienes permisos para aprobar correcciones")
     
     try:
-        correction = approve_price_correction(db, correction_id)
+        correction = approve_price_correction(db, correction_id, current_user.id)
         return {"message": "Corrección aprobada exitosamente", "correction": correction}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -118,27 +137,94 @@ def approve_correction(correction_id: int, db: Session = Depends(get_db), curren
         logger.error(f"Error al aprobar corrección: {str(e)}")
         raise HTTPException(status_code=500, detail="Error al aprobar la corrección")
 
-@router.get("/products/{product_id}/prices")
-def get_product_prices_endpoint(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get("/products/{product_id}/prices", response_model=List[ProductPriceEntry])
+def get_product_prices_endpoint(product_id: int, db: Session = Depends(get_db)):
     try:
-        prices = get_product_prices(db, product_id)
-        return prices
+        prices = get_product_prices_with_locals(db, product_id)
+        return [
+            {
+                "local": p.local,
+                "precio": p.precio,
+                "updated_at": p.updated_at,
+                "updated_by": p.updated_by,
+                "verificado": p.verificado,
+                "verificado_por": p.verificado_por,
+                "verificado_en": p.verificado_en
+            }
+            for p in prices
+        ]
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.error(f"Error al obtener precios del producto {product_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Error al obtener precios")
 
-@router.get("/products/{product_id}/compare")
-def get_product_compare_endpoint(product_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get("/products/{product_id}/compare", response_model=ProductCompareResponse)
+def get_product_compare_endpoint(product_id: int, db: Session = Depends(get_db)):
     try:
-        prices = get_product_compare(db, product_id)
-        return prices
+        result = get_product_compare_response(db, product_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+        product = result["product"]
+        prices = result["prices"]
+        return {
+            "id": product.id,
+            "nombre": product.nombre,
+            "marca": product.marca,
+            "presentacion": product.presentacion,
+            "categoria": product.categoria,
+            "imagen_url": product.imagen_url,
+            "prices": [
+                {
+                    "local": p.local,
+                    "precio": p.precio,
+                    "updated_at": p.updated_at,
+                    "updated_by": p.updated_by,
+                    "verificado": p.verificado,
+                    "verificado_por": p.verificado_por,
+                    "verificado_en": p.verificado_en
+                }
+                for p in prices
+            ]
+        }
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.error(f"Error al comparar precios del producto {product_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Error al comparar precios")
+
+@router.get("/products/{product_id}/history", response_model=List[PriceHistoryEntry])
+def get_product_history_endpoint(
+    product_id: int,
+    local_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db)
+):
+    try:
+        return get_product_price_history(db, product_id, local_id)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error al obtener historial del producto {product_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al obtener historial")
+
+@router.post("/products/{product_id}/barcodes", response_model=Barcode)
+def add_barcode_endpoint(
+    product_id: int,
+    barcode: BarcodeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.rol not in PRIVILEGED_ROLES:
+        raise HTTPException(status_code=403, detail="No tienes permisos para agregar códigos de barra")
+
+    try:
+        return add_product_barcode(db, product_id, barcode.codigo_barra)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error al agregar barcode al producto {product_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al agregar el código de barras")
 
 @router.get("/locals/{local_id}/prices")
 def get_local_prices_endpoint(local_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

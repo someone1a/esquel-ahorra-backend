@@ -17,8 +17,11 @@ pip install -r requirements.txt
 # 4. Configurar variables de entorno
 cp .env.example .env
 
-# 5. Ejecutar migraciones (si es necesario)
-python migrations.py
+# 5. Ejecutar migraciones (Alembic)
+alembic upgrade head
+
+# Crear una nueva migración
+alembic revision --autogenerate -m "mensaje"
 
 # Para corregir manualmente en MySQL:
 mysql -u api -p Esquelahorra < fix_is_active.sql

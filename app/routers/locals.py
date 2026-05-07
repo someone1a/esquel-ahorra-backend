@@ -51,7 +51,7 @@ def create_local(
 @router.get("/", response_model=List[Local])
 def read_locals(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     return db.query(LocalModel).offset(skip).limit(limit).all()
@@ -112,7 +112,7 @@ def update_local(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.rol not in ["vendedor", "supervisor", "admin"]:
+    if current_user.rol not in ["supervisor", "admin"]:
         raise HTTPException(status_code=403, detail="No tienes permisos para actualizar locales")
     
     db_local = db.query(LocalModel).filter(LocalModel.id == local_id).first()
@@ -145,7 +145,7 @@ def delete_local(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.rol not in ["supervisor", "admin"]:
+    if current_user.rol != "admin":
         raise HTTPException(status_code=403, detail="No tienes permisos para eliminar locales")
     
     db_local = db.query(LocalModel).filter(LocalModel.id == local_id).first()
